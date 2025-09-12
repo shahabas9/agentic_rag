@@ -18,9 +18,9 @@ def route_question(state):
     question = state["question"]
     question_router=initialize_question_router()
     source = question_router.invoke({"question": question})
-    if source.datasource == "wiki_search":
+    if source.datasource == "web_search":
         print("---ROUTE QUESTION TO Wiki SEARCH---")
-        return "wiki_search"
+        return "web_search"
     elif source.datasource == "vectorstore":
         print("---ROUTE QUESTION TO RAG---")
         return "vectorstore"

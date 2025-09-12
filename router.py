@@ -3,7 +3,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_groq import ChatGroq
 import os
-
+from dotenv import load_dotenv
 # Data model
 class RouteQuery(BaseModel):
     """Route a user query to the most relevant datasource."""
@@ -13,7 +13,7 @@ class RouteQuery(BaseModel):
         description="Given a user question choose to route it to web search or a vectorstore.",
     )
 
-def initialize_question_router(groq_api_key: str = None, model_name: str = "Gemma2-9b-It"):
+def initialize_question_router(groq_api_key: str = None, model_name: str = "openai/gpt-oss-20b"):
     """
     Initialize a question router that determines whether to use vectorstore or wikipedia search.
     
@@ -24,9 +24,11 @@ def initialize_question_router(groq_api_key: str = None, model_name: str = "Gemm
     Returns:
         A configured question router chain.
     """
+    load_dotenv()
+    groq_api_key = os.getenv("groq_api_key")
     # Set up API key
     if groq_api_key:
-        os.getenv["GROQ_API_KEY"] = groq_api_key
+        os.environ["GROQ_API_KEY"] = groq_api_key
     elif "GROQ_API_KEY" not in os.environ:
         raise ValueError("GROQ_API_KEY not found. Please provide it as an argument or set it as an environment variable.")
     
@@ -37,25 +39,23 @@ def initialize_question_router(groq_api_key: str = None, model_name: str = "Gemm
     structured_llm_router = llm.with_structured_output(RouteQuery)
     
     # Prompt
-    system = """You are a routing expert for gaming customer support questions.
+    system = """You are a routing expert for Loaded (formerly CDKeys) gaming customer support.
 
-    VECTORSTORE (Use for these topics):
-    - Game key activation/redemption issues
-    - Account login and authentication problems
-    - Purchase, payment, and refund inquiries
-    - Technical support for gaming platforms
-    - CDKeys-specific support questions
-    - Platform support (Xbox, PlayStation, Steam, Epic, Nintendo, Battle.net, EA)
+        VECTORSTORE (Use for Loaded/gaming support questions):
+        - Game key activation/redemption
+        - Account login issues
+        - Purchase, payment, refund questions
+        - Loaded-specific support (formerly CDKeys)
+        - Gaming platform support (Xbox, PlayStation, Steam, etc.)
 
-    WEB SEARCH (Use for these topics):
-    - General gaming news and reviews
-    - Game content, walkthroughs, or story questions
-    - Hardware recommendations and reviews
-    - Unrelated non-gaming topics
-    - Very recent events not in documentation
+        WEB SEARCH (Use for other topics):
+        - General gaming news/reviews
+        - Game content/story questions
+        - Hardware recommendations
+        - Non-gaming topics (weather, sports, etc.)
+        - Very recent events
 
-    The vectorstore contains official support documentation from all major gaming platforms.
-    Default to vectorstore for any gaming support-related questions."""
+        Always prefer vectorstore for Loaded and gaming support questions."""
         
     route_prompt = ChatPromptTemplate.from_messages([
         ("system", system),

@@ -2,18 +2,27 @@ import cassio
 from dotenv import load_dotenv
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import WebBaseLoader
+from langchain_community.document_loaders import TextLoader, DirectoryLoader
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain.indexes.vectorstore import VectorStoreIndexWrapper
-from langchain.vectorstores.cassandra import Cassandra
+from langchain_community.vectorstores import Cassandra
+
+# Global variable to store the initialized retriever
+retriever = None
 
 def initialize_and_populate_vectorstore():
     """
     Initialize Astra DB connection and populate vector store with gaming support documentation.
-    
-    Returns:
-        tuple: (astra_vector_store, astra_vector_index, retriever)
+    Returns the retriever (initializes only once).
     """
+    global retriever
+    
+    # If already initialized, return the retriever
+    if retriever is not None:
+        print("---USING EXISTING VECTOR STORE---")
+        return retriever
+    
+    print("---INITIALIZING VECTOR STORE (FIRST TIME)---")
     # Load environment variables
     load_dotenv()
     
@@ -32,26 +41,22 @@ def initialize_and_populate_vectorstore():
     cassio.init(token=ASTRA_DB_APPLICATION_TOKEN, database_id=ASTRA_DB_ID)
     
     # URLs to scrape
-    urls = [
-        "https://support.cdkeys.com/",
-        "https://support.xbox.com/",
-        "https://www.playstation.com/en-us/support/",
-        "https://help.steampowered.com/",
-        "https://www.epicgames.com/help/",
-        "https://en-americas-support.nintendo.com/",
-        "https://us.battle.net/support/en/",
-        "https://help.ea.com/en/"
-    ]
+    print("Loading documents from local repository...")
     
-    # Load documents
-    print("Loading documents from URLs...")
-    docs = [WebBaseLoader(url).load() for url in urls]
-    docs_list = [item for sublist in docs for item in sublist]
+    # Method 1: If you have text files in a directory
+    loader = DirectoryLoader(
+        path="./data/",
+        glob="**/*.txt",  # or "**/*.html" 
+        loader_cls=TextLoader,
+        show_progress=True
+    )
+    docs_list = loader.load()
     
-    # Split documents
+    # Split documents - INCREASED CHUNK SIZE
     print("Splitting documents...")
     text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=1000, chunk_overlap=100
+        chunk_size=1000,  # Increased from 400
+        chunk_overlap=100  # Increased overlap
     )
     doc_splits = text_splitter.split_documents(docs_list)
     
@@ -63,7 +68,7 @@ def initialize_and_populate_vectorstore():
     print("Initializing Astra vector store...")
     astra_vector_store = Cassandra(
         embedding=embeddings,
-        table_name="mini_demo",
+        table_name="test11",
         session=None,
         keyspace=None
     )
@@ -73,23 +78,8 @@ def initialize_and_populate_vectorstore():
     astra_vector_store.add_documents(doc_splits)
     print(f"Inserted {len(doc_splits)} document chunks.")
     
-    # Create index and retriever
-    astra_vector_index = VectorStoreIndexWrapper(vectorstore=astra_vector_store)
-    retriever = astra_vector_store.as_retriever()
+    # Create retriever with better search
+    retriever = astra_vector_store.as_retriever(search_kwargs={"k": 5})
     
     print("Vector store initialization complete!")
     return retriever
-    
-
-# Example usage:
-if __name__ == "__main__":
-    try:
-        vector_store, index, retriever = initialize_and_populate_vectorstore()
-        print("Successfully initialized and populated the vector store!")
-        
-        # You can now use these objects for querying:
-        # results = retriever.get_relevant_documents("your query here")
-        # print(results)
-        
-    except Exception as e:
-        print(f"Error initializing vector store: {e}")
